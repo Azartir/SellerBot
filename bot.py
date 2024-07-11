@@ -161,6 +161,11 @@ def handle_top_up_request(message):
             
             bot.forward_message(ADMIN_ID, message.chat.id, message.message_id)
             bot.send_message(ADMIN_ID, f"Пользователь {user_data[user_id]['username']} прислал чек. Выберите действие:", reply_markup=markup)
+
+        elif message.text == 'Назад':
+            handle_start(message)
+            logger.info(f"Пользователь {user_data[user_id]['username']} ({user_id}) вернулся на стартовый экран")
+            return    
             
         else:
             bot.send_message(message.chat.id, "Пожалуйста, отправьте чек пополнения в формате фото.")
