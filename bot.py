@@ -7,15 +7,28 @@ import json
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Укажите ваш токен и ID администратора здесь
-TELEGRAM_BOT_TOKEN = "7469802414:AAGeN86RbNCEChX4eZ5mOkLa2wn2kew73L0"
-ADMIN_ID = "6459838560"
+# Загрузка конфигурационных данных
+with open('config.json', 'r') as config_file:
+    config = json.load(config_file)
 
 # Инициализация бота
-bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+bot = telebot.TeleBot(config['TELEGRAM_BOT_TOKEN'])
+ADMIN_ID = config['ADMIN_ID']
 
 # Путь к файлу для хранения данных
 data_file = 'user_balances.json'
+# Путь к файлу для логов
+log_file = 'bot_logs.txt'
+
+# Инициализация логгера
+logger = logging.getLogger('telegram_bot')
+logger.setLevel(logging.INFO)
+
+# Обработчик файлового вывода логов
+file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
 
 # Загрузка данных из файла
 def load_data():
@@ -44,6 +57,10 @@ def handle_start(message):
         user_id = str(message.from_user.id)
         username = message.from_user.username
         user_data = load_data()
+
+        # Сохраняем лог о запуске бота пользователя
+        logger.info(f"Пользователь {username} ({user_id}) запустил бота")
+
         if user_id not in user_data:
             user_data[user_id] = {'username': username, 'balance': 0}
             save_data(user_data)
@@ -52,9 +69,13 @@ def handle_start(message):
         keyboard.row(telebot.types.KeyboardButton("Купить UC"))
         keyboard.row(telebot.types.KeyboardButton("Баланс"))
         bot.send_message(message.chat.id, 'Привет! Выберите опцию:', reply_markup=keyboard)
-        logger.info(f"Пользователь {username} ({user_id}) запустил бота")
+        
     except Exception as e:
         logger.error(f"Ошибка при обработке команды /start: {str(e)}")
+
+    finally:
+        # В любом случае сохраняем текущие логи в файл
+        file_handler.flush()
 
 # Функция для генерации клавиатуры с выбором прайса UC
 def generate_price_keyboard():
@@ -79,11 +100,19 @@ def handle_buttons(message):
     try:
         user_id = str(message.from_user.id)
         user_data = load_data()
+
+        # Проверяем сообщение "Назад" в первую очередь
+        if message.text == 'Назад':
+            handle_start(message)
+            logger.info(f"Пользователь {user_data[user_id]['username']} ({user_id}) вернулся на стартовый экран")
+            return
+
+        # Далее обрабатываем остальные возможные действия
         if message.text == 'Купить UC':
             keyboard = generate_price_keyboard()
             bot.send_message(message.chat.id, "Выберите количество UC:", reply_markup=keyboard)
             logger.info(f"Пользователь {user_data[user_id]['username']} ({user_id}) выбрал покупку UC")
-        
+
         elif any(uc in message.text for uc in ['UC']):
             uc_amount, price = message.text.split(' - ')
             uc_amount = uc_amount.replace('UC', '').strip()
@@ -110,10 +139,6 @@ def handle_buttons(message):
             bot.send_message(message.chat.id, "Совершите перевод на указанную вами сумму на карту 2200700495101577 и отправьте фото чека.")
             bot.register_next_step_handler(message, handle_top_up_request)
             logger.info(f"Пользователь {user_data[user_id]['username']} ({user_id}) запросил пополнение")
-            
-        elif message.text == 'Назад':
-            handle_start(message)
-            logger.info(f"Пользователь {user_data[user_id]['username']} ({user_id}) вернулся на стартовый экран")
 
     except Exception as e:
         logger.error(f"Ошибка при обработке нажатия кнопки: {str(e)}")
@@ -145,14 +170,15 @@ def handle_top_up_request(message):
         logger.error(f"Ошибка при обработке запроса на пополнение баланса: {str(e)}")
         bot.send_message(message.chat.id, "Произошла ошибка при обработке вашего чека. Попробуйте еще раз позже.")
 
-# Обработчик процесса покупки UC
+# Функция для обработки покупки UC после подтверждения администратором
 def process_uc_purchase(message, uc_amount, price):
     try:
         user_id = str(message.from_user.id)
-        pubg_id = message.text.strip()
         user_data = load_data()
+        pubg_id = message.text.strip()
         
-        if pubg_id.isdigit():
+        # Производим покупку, если ID в PUBG корректен
+        if pubg_id:
             user_data[user_id]['balance'] -= price
             save_data(user_data)
             bot.send_message(message.chat.id, f"Ваш заказ на {uc_amount} UC принят. ID в PUBG: {pubg_id}. Баланс обновлен, ожидайте пополнения.")
@@ -174,11 +200,14 @@ def handle_admin_buttons(call):
         user_id = call.data.split('_')[-1]
         user_data = load_data()
         if call.data.startswith('real_check'):
+            # Действие при нажатии "реальный чек"
             bot.send_message(call.message.chat.id, f"Введите сумму для пополнения баланса пользователя {user_data[user_id]['username']}:")
             bot.register_next_step_handler(call.message, lambda message: confirm_top_up(message, user_id))
         
         elif call.data.startswith('invalid_check'):
-            bot.send_message(user_id, "Ваш чек не прошел проверку. Пожалуйста, отправьте корректный чек для пополнения баланса.")
+            # Действие при нажатии "некорректный чек"
+            bot.send_message(call.message.chat.id, f"Пользователю отказано.")
+            bot.send_message(user_id, "Ваш чек не прошел проверку. Нажмите 'Назад'.")
     except Exception as e:
         logger.error(f"Ошибка при обработке нажатия кнопки администратором: {str(e)}")
 
