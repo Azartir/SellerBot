@@ -132,7 +132,7 @@ def handle_buttons(message):
             keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
             keyboard.row(telebot.types.KeyboardButton("Пополнить"))
             keyboard.row(telebot.types.KeyboardButton("Назад"))
-            bot.send_message(message.chat.id, f"Ваш баланс: {balance} UC", reply_markup=keyboard)
+            bot.send_message(message.chat.id, f"Ваш баланс: {balance} Р", reply_markup=keyboard)
             logger.info(f"Пользователь {user_data[user_id]['username']} ({user_id}) запросил баланс")
 
         elif message.text == 'Пополнить':
@@ -225,9 +225,9 @@ def confirm_top_up(message, user_id):
             amount = int(admin_message)
             user_data[user_id]['balance'] += amount
             save_data(user_data)
-            bot.send_message(ADMIN_ID, f"Баланс пользователя {user_data[user_id]['username']} успешно пополнен на {amount} UC.")
-            bot.send_message(user_id, f"Ваш баланс успешно пополнен на {amount} UC.")
-            logger.info(f"Пополнение баланса пользователя {user_data[user_id]['username']} ({user_id}) на {amount} UC подтверждено.")
+            bot.send_message(ADMIN_ID, f"Баланс пользователя {user_data[user_id]['username']} успешно пополнен на {amount} Р.")
+            bot.send_message(user_id, f"Ваш баланс успешно пополнен на {amount} Р.")
+            logger.info(f"Пополнение баланса пользователя {user_data[user_id]['username']} ({user_id}) на {amount} Р подтверждено.")
         else:
             bot.send_message(ADMIN_ID, "Введите корректное число.")
             # Регистрация следующего шага для администратора в случае некорректного ввода
